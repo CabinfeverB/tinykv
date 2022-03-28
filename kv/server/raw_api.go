@@ -21,16 +21,12 @@ func (server *Server) RawGet(_ context.Context, req *kvrpcpb.RawGetRequest) (*kv
 	if err != nil {
 		return &kvrpcpb.RawGetResponse{NotFound: true, Error: err.Error()}, err
 	}
-	if len(val) == 0 {
-		return &kvrpcpb.RawGetResponse{Value: val, NotFound: true, Error: err.Error()}, nil
-	}
-	return &kvrpcpb.RawGetResponse{Value: val, NotFound: false}, nil
+	return &kvrpcpb.RawGetResponse{Value: val, NotFound: len(val) == 0}, nil
 }
 
 // RawPut puts the target data into storage and returns the corresponding response
 func (server *Server) RawPut(_ context.Context, req *kvrpcpb.RawPutRequest) (*kvrpcpb.RawPutResponse, error) {
-	modify := storage.Modify{Data: storage.Put{Cf: req.GetCf(), Key: req.GetKey(), Value: req.GetValue()}}
-	batch := []storage.Modify{modify}
+	batch := []storage.Modify{{Data: storage.Put{Cf: req.GetCf(), Key: req.GetKey(), Value: req.GetValue()}}}
 	err := server.storage.Write(req.GetContext(), batch)
 	if err != nil {
 		return &kvrpcpb.RawPutResponse{Error: err.Error()}, err
@@ -58,13 +54,15 @@ func (server *Server) RawScan(_ context.Context, req *kvrpcpb.RawScanRequest) (*
 	defer reader.Close()
 	ret := make([]*kvrpcpb.KvPair, 0)
 	iter := reader.IterCF(req.GetCf())
+	defer iter.Close()
 	iter.Seek(req.GetStartKey())
 	batch := uint32(0)
 	for iter.Valid() && batch < req.Limit {
 		item := iter.Item()
-		iter.Next()
 		key := item.Key()
 		val, err := item.Value()
+		// next after getting key and value
+		iter.Next()
 		if err != nil {
 			continue
 		}

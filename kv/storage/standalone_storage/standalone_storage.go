@@ -18,12 +18,14 @@ type StandAloneStorage struct {
 }
 
 func NewStandAloneStorage(conf *config.Config) *StandAloneStorage {
+	// path which uses "kv" simulates from test file
 	path := filepath.Join(conf.DBPath, "kv")
 	return &StandAloneStorage{path: path}
 }
 
 func (s *StandAloneStorage) Start() error {
 	s.db = engine_util.CreateDB(s.path, false)
+	// if error happen, it will Fatal
 	return nil
 }
 
@@ -37,16 +39,15 @@ func (s *StandAloneStorage) Reader(ctx *kvrpcpb.Context) (storage.StorageReader,
 }
 
 func (s *StandAloneStorage) Write(ctx *kvrpcpb.Context, batch []storage.Modify) error {
-	txn := s.db.NewTransaction(true)
+	// if don't use engine_util, remember to do txn.Commit()
 	for _, modify := range batch {
-		key := engine_util.KeyWithCF(string(modify.Cf()), modify.Key())
 		switch modify.Data.(type) {
 		case storage.Put:
-			if err := txn.Set(key, modify.Value()); err != nil {
+			if err := engine_util.PutCF(s.db, modify.Cf(), modify.Key(), modify.Value()); err != nil {
 				return err
 			}
 		case storage.Delete:
-			if err := txn.Delete(key); err != nil {
+			if err := engine_util.DeleteCF(s.db, modify.Cf(), modify.Key()); err != nil {
 				return err
 			}
 		}
@@ -60,6 +61,10 @@ type StandAloneStorageReader struct {
 
 func (r *StandAloneStorageReader) GetCF(cf string, key []byte) ([]byte, error) {
 	val, err := engine_util.GetCFFromTxn(r.txn, cf, key)
+	// Because of server_test.go L84, ErrKeyNotFound will not return error.
+	if err == badger.ErrKeyNotFound {
+		return nil, nil
+	}
 	return val, err
 }
 
