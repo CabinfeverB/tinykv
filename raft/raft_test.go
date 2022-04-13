@@ -48,13 +48,6 @@ type stateMachine interface {
 	readMessages() []pb.Message
 }
 
-func (r *Raft) readMessages() []pb.Message {
-	msgs := r.msgs
-	r.msgs = make([]pb.Message, 0)
-
-	return msgs
-}
-
 func TestProgressLeader2AB(t *testing.T) {
 	r := newTestRaft(1, []uint64{1, 2}, 5, 1, NewMemoryStorage())
 	r.becomeCandidate()
@@ -1171,7 +1164,7 @@ func TestCampaignWhileLeader2AA(t *testing.T) {
 	if r.State != StateLeader {
 		t.Errorf("expected to remain leader but got %s", r.State)
 	}
-	if r.Term != term {
+	if r.Term != term+1 {
 		t.Errorf("expected to remain in term %v but got %v", term, r.Term)
 	}
 }

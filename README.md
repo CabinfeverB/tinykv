@@ -1,3 +1,6 @@
+# This an implementment of TinyKV
+I put the implementation notes and summary in `note.md`
+
 # The TinyKV Course
 
 The TinyKV course builds a key-value storage system with the Raft consensus algorithm. It is inspired by [MIT 6.824](https://pdos.csail.mit.edu/6.824/) and [TiKV Project](https://github.com/tikv/tikv).

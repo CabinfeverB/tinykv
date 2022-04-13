@@ -89,3 +89,11 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
 	return 0, nil
 }
+
+func (l *RaftLog) SliceEntries(begin uint64) []*pb.Entry {
+	return nil
+}
+
+func (l *RaftLog) UpdateCommit(leaderCommit uint64) {
+	l.committed = min(leaderCommit, l.LastIndex())
+}

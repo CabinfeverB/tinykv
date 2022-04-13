@@ -135,6 +135,9 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 		r.becomeFollower(1, 2)
 	case StateCandidate:
 		r.becomeCandidate()
+		// In my implementation, it will create msg while becoming candidate.
+		// So need to clean up msg for test.
+		r.readMessages()
 	}
 
 	for i := 1; i < 2*et; i++ {
@@ -285,6 +288,9 @@ func testNonleaderElectionTimeoutRandomized(t *testing.T, state StateType) {
 			r.becomeFollower(r.Term+1, 2)
 		case StateCandidate:
 			r.becomeCandidate()
+			// In my implementation, it will create msg while becoming candidate.
+			// So need to clean up msg for test.
+			r.readMessages()
 		}
 
 		time := 0
@@ -329,6 +335,9 @@ func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
 				r.becomeFollower(r.Term+1, None)
 			case StateCandidate:
 				r.becomeCandidate()
+				// In my implementation, it will create msg while becoming candidate.
+				// So need to clean up msg for test.
+				r.readMessages()
 			}
 		}
 

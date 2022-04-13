@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"os/exec"
 	"sort"
@@ -126,4 +127,11 @@ func IsResponseMsg(msgt pb.MessageType) bool {
 
 func isHardStateEqual(a, b pb.HardState) bool {
 	return a.Term == b.Term && a.Vote == b.Vote && a.Commit == b.Commit
+}
+
+func RandomTickFromBaseline(baseline int) int {
+	if baseline > (int(^uint(0)>>1) >> 1) {
+		rand.Intn(baseline)
+	}
+	return rand.Intn(baseline) + baseline
 }
