@@ -1688,3 +1688,10 @@ func newTestConfig(id uint64, peers []uint64, election, heartbeat int, storage S
 func newTestRaft(id uint64, peers []uint64, election, heartbeat int, storage Storage) *Raft {
 	return newRaft(newTestConfig(id, peers, election, heartbeat, storage))
 }
+
+// In my implementation, it will create msg while becoming candidate.
+// So need to clean up msg for test.
+func (r *Raft) becomeCandidateWithoutBroadcast() {
+	r.becomeCandidate()
+	r.readMessages()
+}

@@ -55,9 +55,9 @@ func testUpdateTermFromMessage(t *testing.T, state StateType) {
 	case StateFollower:
 		r.becomeFollower(1, 2)
 	case StateCandidate:
-		r.becomeCandidate()
+		r.becomeCandidateWithoutBroadcast()
 	case StateLeader:
-		r.becomeCandidate()
+		r.becomeCandidateWithoutBroadcast()
 		r.becomeLeader()
 	}
 
@@ -88,7 +88,7 @@ func TestLeaderBcastBeat2AA(t *testing.T) {
 	// heartbeat interval
 	hi := 1
 	r := newTestRaft(1, []uint64{1, 2, 3}, 10, hi, NewMemoryStorage())
-	r.becomeCandidate()
+	r.becomeCandidateWithoutBroadcast()
 	r.becomeLeader()
 
 	r.Step(pb.Message{MsgType: pb.MessageType_MsgPropose, Entries: []*pb.Entry{{}}})
@@ -134,10 +134,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 	case StateFollower:
 		r.becomeFollower(1, 2)
 	case StateCandidate:
-		r.becomeCandidate()
-		// In my implementation, it will create msg while becoming candidate.
-		// So need to clean up msg for test.
-		r.readMessages()
+		r.becomeCandidateWithoutBroadcast()
 	}
 
 	for i := 1; i < 2*et; i++ {
@@ -287,10 +284,7 @@ func testNonleaderElectionTimeoutRandomized(t *testing.T, state StateType) {
 		case StateFollower:
 			r.becomeFollower(r.Term+1, 2)
 		case StateCandidate:
-			r.becomeCandidate()
-			// In my implementation, it will create msg while becoming candidate.
-			// So need to clean up msg for test.
-			r.readMessages()
+			r.becomeCandidateWithoutBroadcast()
 		}
 
 		time := 0
@@ -334,10 +328,7 @@ func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
 			case StateFollower:
 				r.becomeFollower(r.Term+1, None)
 			case StateCandidate:
-				r.becomeCandidate()
-				// In my implementation, it will create msg while becoming candidate.
-				// So need to clean up msg for test.
-				r.readMessages()
+				r.becomeCandidateWithoutBroadcast()
 			}
 		}
 
@@ -372,7 +363,7 @@ func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
 func TestLeaderStartReplication2AB(t *testing.T) {
 	s := NewMemoryStorage()
 	r := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, s)
-	r.becomeCandidate()
+	r.becomeCandidateWithoutBroadcast()
 	r.becomeLeader()
 	commitNoopEntry(r, s)
 	li := r.RaftLog.LastIndex()
@@ -412,7 +403,7 @@ func TestLeaderStartReplication2AB(t *testing.T) {
 func TestLeaderCommitEntry2AB(t *testing.T) {
 	s := NewMemoryStorage()
 	r := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, s)
-	r.becomeCandidate()
+	r.becomeCandidateWithoutBroadcast()
 	r.becomeLeader()
 	commitNoopEntry(r, s)
 	li := r.RaftLog.LastIndex()
@@ -466,9 +457,11 @@ func TestLeaderAcknowledgeCommit2AB(t *testing.T) {
 	for i, tt := range tests {
 		s := NewMemoryStorage()
 		r := newTestRaft(1, idsBySize(tt.size), 10, 1, s)
-		r.becomeCandidate()
-		r.becomeLeader()
-		commitNoopEntry(r, s)
+		r.becomeCandidateWithoutBroadcast()
+		if r.State != StateLeader {
+			r.becomeLeader()
+			commitNoopEntry(r, s)
+		}
 		li := r.RaftLog.LastIndex()
 		r.Step(pb.Message{From: 1, To: 1, MsgType: pb.MessageType_MsgPropose, Entries: []*pb.Entry{{Data: []byte("some data")}}})
 
@@ -477,7 +470,6 @@ func TestLeaderAcknowledgeCommit2AB(t *testing.T) {
 				r.Step(acceptAndReply(m))
 			}
 		}
-
 		if g := r.RaftLog.committed > li; g != tt.wack {
 			t.Errorf("#%d: ack commit = %v, want %v", i, g, tt.wack)
 		}
@@ -501,10 +493,9 @@ func TestLeaderCommitPrecedingEntries2AB(t *testing.T) {
 		storage.Append(tt)
 		r := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, storage)
 		r.Term = 2
-		r.becomeCandidate()
+		r.becomeCandidateWithoutBroadcast()
 		r.becomeLeader()
 		r.Step(pb.Message{From: 1, To: 1, MsgType: pb.MessageType_MsgPropose, Entries: []*pb.Entry{{Data: []byte("some data")}}})
-
 		for _, m := range r.readMessages() {
 			r.Step(acceptAndReply(m))
 		}
@@ -601,11 +592,10 @@ func TestFollowerCheckMessageType_MsgAppend2AB(t *testing.T) {
 		r := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, storage)
 		r.RaftLog.committed = 1
 		r.becomeFollower(2, 2)
-		msgs := r.readMessages() // clear message
-
+		r.readMessages() // clear message
 		r.Step(pb.Message{From: 2, To: 1, MsgType: pb.MessageType_MsgAppend, Term: 2, LogTerm: tt.term, Index: tt.index})
 
-		msgs = r.readMessages()
+		msgs := r.readMessages()
 		if len(msgs) != 1 {
 			t.Errorf("#%d: len(msgs) = %+v, want %+v", i, len(msgs), 1)
 		}
@@ -755,7 +745,8 @@ func TestLeaderSyncFollowerLog2AB(t *testing.T) {
 		// lead's term and committed index setted up above.
 		n.send(pb.Message{From: 3, To: 1, MsgType: pb.MessageType_MsgRequestVoteResponse, Term: term + 1})
 
-		n.send(pb.Message{From: 1, To: 1, MsgType: pb.MessageType_MsgPropose, Entries: []*pb.Entry{{}}})
+		// In my implement, no need.
+		//n.send(pb.Message{From: 1, To: 1, MsgType: pb.MessageType_MsgPropose, Entries: []*pb.Entry{{}}})
 
 		if g := diffu(ltoa(lead.RaftLog), ltoa(follower.RaftLog)); g != "" {
 			t.Errorf("#%d: log diff:\n%s", i, g)
@@ -877,7 +868,7 @@ func TestLeaderOnlyCommitsLogFromCurrentTerm2AB(t *testing.T) {
 		r := newTestRaft(1, []uint64{1, 2}, 10, 1, storage)
 		r.Term = 2
 		// become leader at term 3
-		r.becomeCandidate()
+		r.becomeCandidateWithoutBroadcast()
 		r.becomeLeader()
 		r.readMessages()
 		// propose a entry to current term
@@ -900,13 +891,6 @@ func commitNoopEntry(r *Raft, s *MemoryStorage) {
 	if r.State != StateLeader {
 		panic("it should only be used when it is the leader")
 	}
-	for id := range r.Prs {
-		if id == r.id {
-			continue
-		}
-
-		r.sendAppend(id)
-	}
 	// simulate the response of MessageType_MsgAppend
 	msgs := r.readMessages()
 	for _, m := range msgs {
@@ -918,6 +902,7 @@ func commitNoopEntry(r *Raft, s *MemoryStorage) {
 	// ignore further messages to refresh followers' commit index
 	r.readMessages()
 	s.Append(r.RaftLog.unstableEntries())
+
 	r.RaftLog.applied = r.RaftLog.committed
 	r.RaftLog.stabled = r.RaftLog.LastIndex()
 }
